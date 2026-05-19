@@ -1,0 +1,17 @@
+# Input statements (may contain sensitive financial data)
+statements/
+
+# Output CSVs
+output/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# Excel temp files
+~$*
+
+# VS Code
+.vscode/

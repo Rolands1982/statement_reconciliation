@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python main.py)",
+      "Bash(python -c ' *)",
+      "Bash(python -c \"import xlrd; print\\('xlrd version:', xlrd.__version__\\)\")",
+      "Bash(pip install *)"
+    ]
+  }
+}
