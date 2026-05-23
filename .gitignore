@@ -4,6 +4,13 @@ statements/
 # Output CSVs
 output/
 
+# P21 token cache
+.p21_token_cache.json
+
+# P21 API test responses
+response_*.json
+response_*
+
 # Python
 __pycache__/
 *.pyc

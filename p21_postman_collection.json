@@ -1,0 +1,156 @@
+{
+  "info": {
+    "name": "P21 AP Reconciliation",
+    "description": "API calls for AP statement reconciliation.\n\nBefore running:\n1. Set collection variables: P21_BASE_URL, P21_USERNAME, P21_PASSWORD, SUPPLIER_ID\n2. Run '1. Get Token' first — saves token to P21_TOKEN automatically\n3. Confirmed AP table: apinv_hdr\n   Key columns: vendor_id (integer), invoice_no, invoice_amount, voucher_type (V=invoice/D=credit memo), reverse_flag (Y=voided)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "P21_BASE_URL",
+      "value": "https://ahsoka-prod.cascade-usa.com",
+      "description": "P21 server base URL, no trailing slash"
+    },
+    {
+      "key": "P21_USERNAME",
+      "value": "",
+      "description": "P21 API username"
+    },
+    {
+      "key": "P21_PASSWORD",
+      "value": "",
+      "description": "P21 API password",
+      "type": "secret"
+    },
+    {
+      "key": "P21_TOKEN",
+      "value": "",
+      "description": "Filled automatically by the 'Get Token' request"
+    },
+    {
+      "key": "SUPPLIER_ID",
+      "value": "",
+      "description": "P21 vendor_id (integer, no quotes) — e.g. 100050 for Burten Distribution"
+    },
+    {
+      "key": "MIN_INVOICE_DATE",
+      "value": "2024-01-01T00:00:00Z",
+      "description": "Earliest invoice date from the vendor statement (ISO 8601 UTC)"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Get Token",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var json = pm.response.json();",
+              "if (json.AccessToken) {",
+              "    pm.collectionVariables.set('P21_TOKEN', json.AccessToken);",
+              "    console.log('Token saved. Expires in ' + json.ExpiresIn + ' seconds.');",
+              "} else {",
+              "    console.error('No AccessToken in response:', JSON.stringify(json));",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "username",       "value": "{{P21_USERNAME}}" },
+          { "key": "password",       "value": "{{P21_PASSWORD}}" },
+          { "key": "Content-Length", "value": "0" },
+          { "key": "Accept",         "value": "application/json" }
+        ],
+        "body": { "mode": "raw", "raw": "" },
+        "url": {
+          "raw": "{{P21_BASE_URL}}/api/security/token/",
+          "host": ["{{P21_BASE_URL}}"],
+          "path": ["api", "security", "token", ""]
+        },
+        "description": "Obtain a Bearer JWT (24-hour TTL). Token is saved automatically to P21_TOKEN.\n\nNOTE: Content-Length: 0 header is mandatory — server returns 411 without it."
+      }
+    },
+    {
+      "name": "2. Validate Token",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "username",       "value": "{{P21_USERNAME}}" },
+          { "key": "password",       "value": "{{P21_PASSWORD}}" },
+          { "key": "Content-Length", "value": "0" },
+          { "key": "Accept",         "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{P21_BASE_URL}}/api/security/token/",
+          "host": ["{{P21_BASE_URL}}"],
+          "path": ["api", "security", "token", ""]
+        },
+        "description": "Validates an existing token. Returns {\"IsValid\": true} or {\"IsValid\": false}. Use GET (not POST)."
+      }
+    },
+    {
+      "name": "3. Probe apinv_hdr (confirmed AP table)",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{P21_TOKEN}}" },
+          { "key": "Accept",        "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{P21_BASE_URL}}/odataservice/odata/table/apinv_hdr?$top=1",
+          "host": ["{{P21_BASE_URL}}"],
+          "path": ["odataservice", "odata", "table", "apinv_hdr"],
+          "query": [
+            { "key": "$top", "value": "1" }
+          ]
+        },
+        "description": "Probe the confirmed AP voucher table. Returns one row so you can verify column names.\n\nConfirmed columns:\n- vendor_id (integer)\n- invoice_no (string)\n- invoice_amount (decimal; negative = credit memo)\n- voucher_type ('V' = invoice, 'D' = debit/credit memo)\n- reverse_flag ('Y' = voided — exclude these)\n- invoice_date (datetime)\n- net_due_date, paid_in_full, po_no, description"
+      }
+    },
+    {
+      "name": "4. Get AP Vouchers for a Supplier (with date filter)",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{P21_TOKEN}}" },
+          { "key": "Accept",        "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{P21_BASE_URL}}/odataservice/odata/table/apinv_hdr?$filter=vendor_id eq {{SUPPLIER_ID}} and reverse_flag ne 'Y' and invoice_date ge {{MIN_INVOICE_DATE}}&$select=invoice_no,vendor_id,invoice_amount,voucher_type,reverse_flag,invoice_date,net_due_date,paid_in_full,po_no&$top=50",
+          "host": ["{{P21_BASE_URL}}"],
+          "path": ["odataservice", "odata", "table", "apinv_hdr"],
+          "query": [
+            { "key": "$filter", "value": "vendor_id eq {{SUPPLIER_ID}} and reverse_flag ne 'Y' and invoice_date ge {{MIN_INVOICE_DATE}}" },
+            { "key": "$select", "value": "invoice_no,vendor_id,invoice_amount,voucher_type,reverse_flag,invoice_date,net_due_date,paid_in_full,po_no" },
+            { "key": "$top",    "value": "50" }
+          ]
+        },
+        "description": "Fetch AP vouchers for a supplier filtered by date.\n\nSet before running:\n- SUPPLIER_ID: integer vendor_id (no quotes) — e.g. 100050\n- MIN_INVOICE_DATE: earliest invoice date from the statement — e.g. 2024-01-01T00:00:00Z\n\nIMPORTANT: vendor_id is an integer column — do NOT wrap {{SUPPLIER_ID}} in quotes.\n\nvoucher_type values: 'V' = regular invoice, 'D' = debit/credit memo\nreverse_flag = 'Y' means voided — excluded by the filter."
+      }
+    },
+    {
+      "name": "5. Look Up Single Invoice by Invoice Number",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{P21_TOKEN}}" },
+          { "key": "Accept",        "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{P21_BASE_URL}}/odataservice/odata/table/apinv_hdr?$filter=vendor_id eq {{SUPPLIER_ID}} and invoice_no eq 'INV-NUMBER-HERE' and invoice_date ge {{MIN_INVOICE_DATE}}&$select=invoice_no,vendor_id,invoice_amount,voucher_type,reverse_flag,invoice_date,net_due_date,paid_in_full,po_no",
+          "host": ["{{P21_BASE_URL}}"],
+          "path": ["odataservice", "odata", "table", "apinv_hdr"],
+          "query": [
+            { "key": "$filter", "value": "vendor_id eq {{SUPPLIER_ID}} and invoice_no eq 'INV-NUMBER-HERE' and invoice_date ge {{MIN_INVOICE_DATE}}" },
+            { "key": "$select", "value": "invoice_no,vendor_id,invoice_amount,voucher_type,reverse_flag,invoice_date,net_due_date,paid_in_full,po_no" }
+          ]
+        },
+        "description": "Look up one specific invoice for a supplier.\n\nReplace 'INV-NUMBER-HERE' with an actual invoice number from a vendor statement.\nSet SUPPLIER_ID and MIN_INVOICE_DATE as collection variables.\n\nThis tests the exact match logic reconcile.py will use."
+      }
+    }
+  ]
+}
