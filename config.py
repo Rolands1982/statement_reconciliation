@@ -16,7 +16,7 @@ P21_PASSWORD  = os.getenv("P21_PASSWORD", "")
 VENDOR_P21_IDS: dict[str, str | list[str]] = {
     "Anodyne":               "125038",
     "Aspen Medical Products": "100470",
-    "BSN Medical":           "100211",
+    "BSN Medical":           ["100211", "104376"],  # BSN Medical + Jobst
     "Burten Distribution":   "100050",
     "DJO Global":            ["100329", "109833"],  # DJO Global + Dr Comfort
     "JMS Plastics":          "100421",
@@ -30,5 +30,6 @@ VENDOR_P21_IDS: dict[str, str | list[str]] = {
     "MD Orthopaedics":       "120482",
     "Medical Action":        "100228",
     "Spinal Technology":     "124974",
-    "Thuasne":               "103143",
+    "Knit Rite":             "100216",  # CASCADE ORTHOPEDIC SUPPLY account (K10011100)
+    "Thuasne":               "103143",  # CASCADE main account (KCAS40000)
 }

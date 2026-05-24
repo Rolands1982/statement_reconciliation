@@ -58,7 +58,23 @@ class ApRecord:
 
 
 def _normalize(inv: str) -> str:
-    return inv.strip().lstrip("0").upper()
+    """Normalize invoice numbers for consistent matching.
+
+    1. Strip whitespace and uppercase
+    2. Strip leading alpha characters (e.g. 'CD2139288' -> '2139288', Aspen)
+    3. Strip trailing dash+alpha suffix (e.g. '2050162-IN' -> '2050162', JMS Plastics)
+    4. Strip leading zeros (e.g. '02809255' -> '2809255', Juzo)
+    5. Strip '100' prefix from '0100XXXXXX' pattern (9-digit, Justin Blair)
+    """
+    import re
+    s = inv.strip().upper()
+    s = re.sub(r"^[A-Z]+", "", s)
+    s = s.lstrip("-")
+    s = re.sub(r"-[A-Z]+$", "", s)
+    s = s.lstrip("0")
+    if len(s) == 9 and s.startswith("100") and s[3:].isdigit():
+        s = s[3:]
+    return s
 
 
 def _build_filter(vendor_id: int, min_date: date, invoice_no: str | None = None) -> str:

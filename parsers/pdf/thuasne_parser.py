@@ -4,7 +4,13 @@ from decimal import Decimal
 import pdfplumber
 from parsers.base_parser import BaseParser, ParseResult, StatementLine, parse_date, parse_decimal, validate_po
 
-VENDOR = "Thuasne"
+# Payer code → vendor name mapping
+# Payer code appears on the header line: "04/30/26 0050229635 KCAS40000 ..."
+_PAYER_VENDOR: dict[str, str] = {
+    "KCAS40000": "Thuasne",
+    "K10011100": "Knit Rite",
+}
+_DEFAULT_VENDOR = "Thuasne"
 
 # Match the invoice/credit data pattern anchored at the end of the line.
 # Does NOT require "Invoice"/"Credit" as an anchor — payer name text can overlap
@@ -18,6 +24,7 @@ _LINE_RE = re.compile(
     r"(-?[\d\s]+\.\d{2})\s*$"          # amount
 )
 _STMT_DATE_RE = re.compile(r"(\d{2}/\d{2}/\d{2,4})\s+\d+")
+_PAYER_CODE_RE = re.compile(r"\d{2}/\d{2}/\d{2,4}\s+\S+\s+(\S+)\s+Thuasne")
 _TOTAL_RE = re.compile(r"^Total\s+([\d\s]+\.\d{2})\s*$")
 
 
@@ -31,6 +38,7 @@ class ThuasneParser(BaseParser):
         lines_out = []
         statement_date = None
         file_total = None
+        vendor_name = _DEFAULT_VENDOR
         seen: set[str] = set()  # deduplicate by invoice_no (PDF is duplex — pages repeat)
 
         with pdfplumber.open(self.filepath) as pdf:
@@ -41,11 +49,14 @@ class ThuasneParser(BaseParser):
                     if not line:
                         continue
 
-                    # Statement date from header info line
+                    # Payer code + statement date from header line:
+                    # "04/30/26 0050229635 KCAS40000 Thuasne Accounting Hotline ..."
                     if statement_date is None:
-                        m = _STMT_DATE_RE.match(line)
+                        m = _PAYER_CODE_RE.search(line)
                         if m:
-                            statement_date = parse_date(m.group(1))
+                            payer_code = m.group(1)
+                            vendor_name = _PAYER_VENDOR.get(payer_code, _DEFAULT_VENDOR)
+                            statement_date = parse_date(line.split()[0])
 
                     # Grand total line (appears once on the last page)
                     m = _TOTAL_RE.match(line)
@@ -75,7 +86,7 @@ class ThuasneParser(BaseParser):
 
                     lines_out.append(StatementLine(
                         source_file=self.filename,
-                        vendor_name=VENDOR,
+                        vendor_name=vendor_name,
                         statement_date=statement_date,
                         invoice_number=inv_no,
                         invoice_date=parse_date(inv_date_s),

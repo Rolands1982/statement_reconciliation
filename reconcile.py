@@ -39,8 +39,10 @@ REPORT_COLUMNS = [
     "invoice_date",
     "due_date",
     "po_number",
-    "statement_amount",   # balance_amount from Phase 1
+    "statement_amount",      # balance_amount from Phase 1
     "statement_inv_amount",  # original invoice_amount from Phase 1
+    "p21_invoice_no_raw",        # invoice_no as stored in P21
+    "p21_invoice_no_normalized", # invoice_no after normalization (matches invoice_number when found)
     "p21_invoice_amount",
     "p21_remaining",
     "p21_voucher_type",
@@ -68,7 +70,25 @@ def _to_decimal(val) -> Decimal | None:
 
 
 def _normalize(inv: str) -> str:
-    return inv.strip().lstrip("0").upper()
+    """Normalize invoice numbers for consistent matching.
+
+    Steps applied in order:
+    1. Strip whitespace and uppercase
+    2. Strip leading alpha characters (e.g. 'CD2139288' -> '2139288', Aspen pattern)
+    3. Strip trailing dash+alpha suffix (e.g. '2050162-IN' -> '2050162', JMS Plastics pattern)
+    4. Strip leading zeros (e.g. '02809255' -> '2809255', Juzo pattern)
+    5. Strip '100' prefix from '0100XXXXXX' pattern (Justin Blair)
+       only when result is exactly 9 digits starting with '100'
+    """
+    import re
+    s = inv.strip().upper()
+    s = re.sub(r"^[A-Z]+", "", s)
+    s = s.lstrip("-")
+    s = re.sub(r"-[A-Z]+$", "", s)
+    s = s.lstrip("0")
+    if len(s) == 9 and s.startswith("100") and s[3:].isdigit():
+        s = s[3:]
+    return s
 
 
 # ── Phase 1 CSV loading ───────────────────────────────────────────────────────
@@ -123,7 +143,12 @@ def collect_statement_lines(out_dir: Path, vendor_filter: str | None) -> dict[st
 
 def match_row(row: dict, p21_lookup: dict[str, ApRecord]) -> dict:
     """Match one statement row against the P21 lookup dict. Returns report dict."""
-    inv_no   = _normalize(str(row.get("invoice_number", "")))
+    raw_inv = str(row.get("invoice_number", ""))
+    # BSN pattern: invoice_number starting with '21' is a batch ref —
+    # use notes column as the actual invoice number for matching
+    if raw_inv.startswith("21") and row.get("notes", "").strip():
+        raw_inv = str(row.get("notes", "")).strip()
+    inv_no   = _normalize(raw_inv)
     stmt_bal = _to_decimal(row.get("balance_amount"))
     stmt_inv = _to_decimal(row.get("invoice_amount"))
 
@@ -138,6 +163,8 @@ def match_row(row: dict, p21_lookup: dict[str, ApRecord]) -> dict:
         "po_number":         row.get("po_number", ""),
         "statement_amount":  str(stmt_bal) if stmt_bal is not None else row.get("balance_amount", ""),
         "statement_inv_amount": str(stmt_inv) if stmt_inv is not None else row.get("invoice_amount", ""),
+        "p21_invoice_no_raw":        "",
+        "p21_invoice_no_normalized": "",
         "p21_invoice_amount": "",
         "p21_remaining":      "",
         "p21_voucher_type":   "",
@@ -155,6 +182,8 @@ def match_row(row: dict, p21_lookup: dict[str, ApRecord]) -> dict:
         base["match_status"] = MS_NOT_IN_P21
         return base
 
+    base["p21_invoice_no_raw"]        = rec.invoice_no_raw
+    base["p21_invoice_no_normalized"] = rec.invoice_no
     base["p21_invoice_amount"] = str(rec.invoice_amount) if rec.invoice_amount is not None else ""
     base["p21_remaining"]      = str(rec.remaining)      if rec.remaining      is not None else ""
     base["p21_voucher_type"]   = rec.voucher_type or ""
