@@ -19,7 +19,10 @@ _DUE_RE = re.compile(r"Due\s+(\d{2}/\d{2}/\d{4})")
 _ORIG_RE = re.compile(r"Orig\.\s+Amount\s+\$?([\d,]+\.\d{2})")
 # Text after "Orig. Amount $X.XX." (patient name/code that spills onto the same line)
 _AFTER_ORIG_RE = re.compile(r"Orig\.\s+Amount\s+\$?[\d,]+\.\d{2}\.\s*(.*)")
-_STMT_DATE_RE = re.compile(r"Date\b[^\d]*(\d{1,2}/\d{1,2}/\d{4})", re.MULTILINE)
+# Statement date is on its own line near the top (two-column PDF layout puts
+# the label "Date" and the value "2/27/2026" on separate extracted lines).
+# Match a standalone date line that is NOT the start of a transaction (no INV/PMT/CREDMEM after it).
+_STMT_DATE_RE = re.compile(r"^(\d{1,2}/\d{1,2}/\d{4})$", re.MULTILINE)
 _TOTAL_RE = re.compile(r"Amount Due\s+\$?([\d,]+\.\d{2})", re.IGNORECASE)
 
 # Patterns that disqualify a line from being a patient-name continuation
